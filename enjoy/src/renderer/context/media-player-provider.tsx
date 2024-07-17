@@ -51,8 +51,6 @@ type MediaPlayerContextType = {
   regions: Regions | null;
   activeRegion: RegionType;
   setActiveRegion: (region: RegionType) => void;
-  editingRegion: boolean;
-  setEditingRegion: (editing: boolean) => void;
   renderPitchContour: (
     region: RegionType,
     options?: {
@@ -62,6 +60,8 @@ type MediaPlayerContextType = {
       data?: Chart["data"];
     }
   ) => void;
+  editingRegion: boolean;
+  setEditingRegion: (editing: boolean) => void;
   pitchChart: Chart;
   // Transcription
   transcription: TranscriptionType;
@@ -263,6 +263,9 @@ export const MediaPlayerProvider = ({
     if (!waveform?.frequencies?.length) return;
     if (!wavesurfer) return;
 
+    const caption = transcription?.result?.timeline?.[currentSegmentIndex];
+    if (!caption) return;
+
     const { repaint = true, containerClassNames = [] } = options || {};
     const duration = wavesurfer.getDuration();
     const fromIndex = Math.round(
@@ -319,7 +322,6 @@ export const MediaPlayerProvider = ({
       const regionDuration = region.end - region.start;
 
       const labels = new Array(data.length).fill("");
-      const caption = transcription?.result?.timeline?.[currentSegmentIndex];
       if (region.id.startsWith("segment-region")) {
         caption.timeline.forEach((segment: TimelineEntry) => {
           const index = Math.round(
@@ -520,6 +522,7 @@ export const MediaPlayerProvider = ({
    */
   useEffect(() => {
     if (!activeRegion) return;
+    if (!wavesurfer) return;
 
     renderPitchContour(activeRegion);
   }, [wavesurfer, activeRegion]);
@@ -605,10 +608,10 @@ export const MediaPlayerProvider = ({
           minPxPerSec,
           transcription,
           regions,
-          renderPitchContour,
           pitchChart,
           activeRegion,
           setActiveRegion,
+          renderPitchContour,
           editingRegion,
           setEditingRegion,
           generateTranscription,

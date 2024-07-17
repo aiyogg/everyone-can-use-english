@@ -58,12 +58,7 @@ export class Client {
           return Promise.reject(new Error(err.response.data));
         }
 
-        if (err.request) {
-          this.logger.error(err.request);
-        } else {
-          this.logger.error(err.message);
-        }
-
+        this.logger.error(err.message);
         return Promise.reject(err);
       }
     );
@@ -222,6 +217,14 @@ export class Client {
 
   deletePost(id: string): Promise<void> {
     return this.api.delete(`/api/posts/${id}`);
+  }
+
+  likePost(id: string): Promise<PostType> {
+    return this.api.post(`/api/posts/${id}/like`);
+  }
+
+  unlikePost(id: string): Promise<PostType> {
+    return this.api.delete(`/api/posts/${id}/unlike`);
   }
 
   transcriptions(params?: {
@@ -470,6 +473,110 @@ export class Client {
     } & PagyResponseType
   > {
     return this.api.get("/api/mine/segments", {
+      params: decamelizeKeys(params),
+    });
+  }
+
+  courses(params?: {
+    language?: string;
+    page?: number;
+    items?: number;
+    query?: string;
+  }): Promise<
+    {
+      courses: CourseType[];
+    } & PagyResponseType
+  > {
+    return this.api.get("/api/courses", { params: decamelizeKeys(params) });
+  }
+
+  course(id: string): Promise<CourseType> {
+    return this.api.get(`/api/courses/${id}`);
+  }
+
+  createEnrollment(courseId: string): Promise<EnrollmentType> {
+    return this.api.post(`/api/enrollments`, decamelizeKeys({ courseId }));
+  }
+
+  courseChapters(
+    courseId: string,
+    params?: {
+      page?: number;
+      items?: number;
+      query?: string;
+    }
+  ): Promise<
+    {
+      chapters: ChapterType[];
+    } & PagyResponseType
+  > {
+    return this.api.get(`/api/courses/${courseId}/chapters`, {
+      params: decamelizeKeys(params),
+    });
+  }
+
+  coursechapter(courseId: string, id: number | string): Promise<ChapterType> {
+    return this.api.get(`/api/courses/${courseId}/chapters/${id}`);
+  }
+
+  finishCourseChapter(courseId: string, id: number | string): Promise<void> {
+    return this.api.post(`/api/courses/${courseId}/chapters/${id}/finish`);
+  }
+
+  enrollments(params?: { page?: number; items?: number }): Promise<
+    {
+      enrollments: EnrollmentType[];
+    } & PagyResponseType
+  > {
+    return this.api.get("/api/enrollments", { params: decamelizeKeys(params) });
+  }
+
+  updateEnrollment(
+    id: string,
+    params: {
+      currentChapterId?: string;
+    }
+  ): Promise<EnrollmentType> {
+    return this.api.put(`/api/enrollments/${id}`, decamelizeKeys(params));
+  }
+
+  createLlmChat(params: {
+    agentId: string;
+    agentType: string;
+  }): Promise<LLmChatType> {
+    return this.api.post("/api/chats", decamelizeKeys(params));
+  }
+
+  llmChat(id: string): Promise<LLmChatType> {
+    return this.api.get(`/api/chats/${id}`);
+  }
+
+  createLlmMessage(
+    chatId: string,
+    params: {
+      query: string;
+      agentId?: string;
+      agentType?: string;
+    }
+  ): Promise<LlmMessageType> {
+    return this.api.post(
+      `/api/chats/${chatId}/messages`,
+      decamelizeKeys(params)
+    );
+  }
+
+  llmMessages(
+    chatId: string,
+    params: {
+      page?: number;
+      items?: number;
+    }
+  ): Promise<
+    {
+      messages: LlmMessageType[];
+    } & PagyResponseType
+  > {
+    return this.api.get(`/api/chats/${chatId}/messages`, {
       params: decamelizeKeys(params),
     });
   }

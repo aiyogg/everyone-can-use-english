@@ -178,7 +178,6 @@ type EnjoyAppType = {
     update: (id: string, params: any) => Promise<RecordingType | undefined>;
     destroy: (id: string) => Promise<void>;
     upload: (id: string) => Promise<void>;
-    assess: (id: string, language?: string) => Promise<void>;
     stats: (params: { from: string; to: string }) => Promise<{
       count: number;
       duration: number;
@@ -227,6 +226,7 @@ type EnjoyAppType = {
     createSpeech: (id: string, configuration?: any) => Promise<SpeechType>;
   };
   speeches: {
+    findOne: (where: any) => Promise<SpeechType>;
     create: (
       params: {
         sourceId: string;
@@ -290,6 +290,7 @@ type EnjoyAppType = {
     cancelAll: () => void;
     dashboard: () => Promise<DownloadStateType[]>;
     removeAllListeners: () => void;
+    printAsPdf: (content: string, savePath?: string) => Promise<void>;
   };
   cacheObjects: {
     get: (key: string) => Promise<any>;
