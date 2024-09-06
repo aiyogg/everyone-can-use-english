@@ -26,9 +26,10 @@ import { formatDuration } from "@renderer/lib/utils";
 import {
   MediaTranscriptionReadButton,
   MediaTranscriptionGenerateButton,
-  MediaTranscriptionDownload,
+  MediaTranscriptionPrint,
   TranscriptionEditButton,
 } from "@renderer/components";
+import { Sentence } from "@renderer/components";
 
 export const MediaTranscription = (props: { display?: boolean }) => {
   const { display } = props;
@@ -165,7 +166,7 @@ export const MediaTranscription = (props: { display?: boolean }) => {
                   </TranscriptionEditButton>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <MediaTranscriptionDownload />
+                  <MediaTranscriptionPrint />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -182,10 +183,7 @@ export const MediaTranscription = (props: { display?: boolean }) => {
               currentSegmentIndex === index ? "bg-yellow-400/25" : ""
             }`}
             onClick={() => {
-              const duration = wavesurfer.getDuration();
-              wavesurfer.seekTo(
-                Math.floor((sentence.startTime / duration) * 1e8) / 1e8
-              );
+              wavesurfer.setTime(parseFloat(sentence.startTime.toFixed(6)));
               wavesurfer.setScrollTime(sentence.startTime);
               setCurrentSegmentIndex(index);
             }}
@@ -205,7 +203,8 @@ export const MediaTranscription = (props: { display?: boolean }) => {
                 </span>
               </div>
             </div>
-            <p className="">{sentence.text}</p>
+
+            <Sentence sentence={sentence.text} />
           </div>
         )
       )}

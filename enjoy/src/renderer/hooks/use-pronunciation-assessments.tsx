@@ -15,10 +15,10 @@ export const usePronunciationAssessments = () => {
   }) => {
     let { recording, targetId, targetType } = params;
     if (targetId && targetType && !recording) {
-      recording = await EnjoyApp.recordings.findOne(targetId);
+      recording = await EnjoyApp.recordings.findOne({ targetId });
     }
 
-    await EnjoyApp.recordings.sync(recording.id);
+    EnjoyApp.recordings.sync(recording.id);
     const blob = await (await fetch(recording.src)).blob();
     targetId = recording.id;
     targetType = "Recording";

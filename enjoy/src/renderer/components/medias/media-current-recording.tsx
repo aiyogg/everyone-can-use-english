@@ -4,7 +4,7 @@ import {
   HotKeysSettingsProviderContext,
   MediaPlayerProviderContext,
 } from "@renderer/context";
-import { MediaRecorder, RecordingDetail } from "@renderer/components";
+import { RecordingDetail } from "@renderer/components";
 import { renderPitchContour } from "@renderer/lib/utils";
 import { extractFrequencies } from "@/utils";
 import WaveSurfer from "wavesurfer.js";
@@ -46,12 +46,15 @@ import {
 import { t } from "i18next";
 import { formatDuration } from "@renderer/lib/utils";
 import { useHotkeys } from "react-hotkeys-hook";
+import { LiveAudioVisualizer } from "react-audio-visualize";
 
 export const MediaCurrentRecording = () => {
   const {
     layout,
     isRecording,
-    setIsRecording,
+    isPaused,
+    recordingTime,
+    mediaRecorder,
     currentRecording,
     renderPitchContour: renderMediaPitchContour,
     regions: mediaRegions,
@@ -64,9 +67,7 @@ export const MediaCurrentRecording = () => {
     currentTime: mediaCurrentTime,
   } = useContext(MediaPlayerProviderContext);
   const { webApi, EnjoyApp } = useContext(AppSettingsProviderContext);
-  const { currentHotkeys } = useContext(
-    HotKeysSettingsProviderContext
-  );
+  const { currentHotkeys } = useContext(HotKeysSettingsProviderContext);
   const [player, setPlayer] = useState(null);
   const [regions, setRegions] = useState<Regions | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -423,13 +424,53 @@ export const MediaCurrentRecording = () => {
   }, [currentRecording, isRecording, layout?.width]);
 
   useHotkeys(currentHotkeys.PlayOrPauseRecording, () => {
-    document.getElementById("recording-play-or-pause-button").click();
+    const button = document.getElementById("recording-play-or-pause-button");
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const elementAtPoint = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+    if (elementAtPoint !== button && !button.contains(elementAtPoint)) return;
+
+    button.click();
   });
+
   useHotkeys(currentHotkeys.PronunciationAssessment, () => {
+    if (isRecording) return;
     setDetailIsOpen(!detailIsOpen);
   });
 
-  if (isRecording) return <MediaRecorder />;
+  if (isRecording || isPaused) {
+    return (
+      <div className="h-full w-full flex items-center space-x-4">
+        <div className="flex-1 h-full border rounded-xl shadow-lg relative">
+          <div className="w-full h-full flex justify-center items-center gap-4">
+            <LiveAudioVisualizer
+              mediaRecorder={mediaRecorder}
+              barWidth={2}
+              gap={2}
+              width={480}
+              height="100%"
+              fftSize={512}
+              maxDecibels={-10}
+              minDecibels={-80}
+              smoothingTimeConstant={0.4}
+            />
+            <span className="serif text-muted-foreground text-sm">
+              {Math.floor(recordingTime / 60)}:
+              {String(recordingTime % 60).padStart(2, "0")}
+            </span>
+          </div>
+        </div>
+        <div className="h-full flex flex-col justify-start space-y-1.5">
+          <MediaRecordButton />
+        </div>
+      </div>
+    );
+  }
+
   if (!currentRecording?.src)
     return (
       <div className="h-full w-full flex items-center space-x-4">
@@ -445,10 +486,7 @@ export const MediaCurrentRecording = () => {
         </div>
 
         <div className="h-full flex flex-col justify-start space-y-1.5">
-          <MediaRecordButton
-            isRecording={isRecording}
-            setIsRecording={setIsRecording}
-          />
+          <MediaRecordButton />
         </div>
       </div>
     );
@@ -496,10 +534,7 @@ export const MediaCurrentRecording = () => {
           )}
         </Button>
 
-        <MediaRecordButton
-          isRecording={isRecording}
-          setIsRecording={setIsRecording}
-        />
+        <MediaRecordButton />
 
         <Button
           variant={detailIsOpen ? "secondary" : "outline"}
@@ -618,7 +653,7 @@ export const MediaCurrentRecording = () => {
       </div>
 
       <AlertDialog open={isSharing} onOpenChange={setIsSharing}>
-        <AlertDialogContent>
+        <AlertDialogContent aria-describedby={undefined}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("shareRecording")}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -636,6 +671,7 @@ export const MediaCurrentRecording = () => {
 
       <Sheet open={detailIsOpen} onOpenChange={(open) => setDetailIsOpen(open)}>
         <SheetContent
+          aria-describedby={undefined}
           side="bottom"
           className="rounded-t-2xl shadow-lg max-h-screen overflow-y-scroll"
           displayClose={false}
@@ -656,16 +692,61 @@ export const MediaCurrentRecording = () => {
   );
 };
 
-export const MediaRecordButton = (props: {
-  isRecording: boolean;
-  setIsRecording: (value: boolean) => void;
-}) => {
-  const { isRecording, setIsRecording } = props;
+export const MediaRecordButton = () => {
+  const { media, isRecording, startRecording, stopRecording, recordingTime } =
+    useContext(MediaPlayerProviderContext);
+  const { EnjoyApp } = useContext(AppSettingsProviderContext);
+  const [access, setAccess] = useState(true);
+  const [active, setActive] = useState(false);
+  const ref = useRef(null);
+
+  const askForMediaAccess = () => {
+    EnjoyApp.system.preferences.mediaAccess("microphone").then((access) => {
+      if (access) {
+        setAccess(true);
+      } else {
+        setAccess(false);
+        toast.warning(t("noMicrophoneAccess"));
+      }
+    });
+  };
+
+  useEffect(() => {
+    askForMediaAccess();
+  }, [media]);
+
+  useEffect(() => {
+    if (!active) return;
+    if (recordingTime >= 60) {
+      stopRecording();
+    }
+  }, [active, recordingTime]);
+
+  useEffect(() => {
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const elementAtPoint = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+    setActive(
+      elementAtPoint == ref.current || ref.current.contains(elementAtPoint)
+    );
+  }, [ref, isRecording]);
 
   return (
     <Button
+      ref={ref}
       variant="ghost"
-      onClick={() => setIsRecording(!isRecording)}
+      disabled={!access}
+      onClick={() => {
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
+      }}
       id="media-record-button"
       data-tooltip-id="media-player-tooltip"
       data-tooltip-content={

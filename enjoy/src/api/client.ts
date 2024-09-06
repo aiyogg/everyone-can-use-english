@@ -64,6 +64,10 @@ export class Client {
     );
   }
 
+  up() {
+    return this.api.get("/up");
+  }
+
   auth(params: {
     provider: "mixin" | "github" | "bandu" | "email";
     code?: string;
@@ -241,6 +245,10 @@ export class Client {
     return this.api.get("/api/transcriptions", {
       params: decamelizeKeys(params),
     });
+  }
+
+  usages(): Promise<{ label: string; data: number[] }[]> {
+    return this.api.get("/api/mine/usages");
   }
 
   syncAudio(audio: Partial<AudioType>) {
@@ -439,7 +447,7 @@ export class Client {
 
   createPayment(params: {
     amount: number;
-    reconciledCurrency: string;
+    reconciledCurrency?: string;
     processor: string;
     paymentType: string;
   }): Promise<PaymentType> {
@@ -462,7 +470,7 @@ export class Client {
     return this.api.get(`/api/payments/${id}`);
   }
 
-  mineSegments(params?: {
+  segments(params?: {
     page?: number;
     segmentIndex?: number;
     targetId?: string;
@@ -472,7 +480,7 @@ export class Client {
       segments: SegmentType[];
     } & PagyResponseType
   > {
-    return this.api.get("/api/mine/segments", {
+    return this.api.get("/api/segments", {
       params: decamelizeKeys(params),
     });
   }

@@ -7,7 +7,6 @@ import { ChatMessageHistory, BufferMemory } from "langchain/memory/index";
 import { ConversationChain } from "langchain/chains";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatOllama } from "@langchain/community/chat_models/ollama";
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
@@ -22,9 +21,7 @@ export const useConversation = () => {
   const { EnjoyApp, webApi, user, apiUrl, learningLanguage } = useContext(
     AppSettingsProviderContext
   );
-  const { openai, googleGenerativeAi, currentEngine } = useContext(
-    AISettingsProviderContext
-  );
+  const { openai, currentEngine } = useContext(AISettingsProviderContext);
 
   const pickLlm = (conversation: ConversationType) => {
     const {
@@ -74,17 +71,6 @@ export const useConversation = () => {
         temperature,
         frequencyPenalty,
         presencePenalty,
-        maxRetries: 2,
-      });
-    } else if (conversation.engine === "googleGenerativeAi") {
-      if (!googleGenerativeAi)
-        throw new Error("Google Generative AI API key is required");
-
-      return new ChatGoogleGenerativeAI({
-        apiKey: googleGenerativeAi.key,
-        modelName: model,
-        temperature: temperature,
-        maxOutputTokens: maxTokens,
         maxRetries: 2,
       });
     }
@@ -164,7 +150,7 @@ export const useConversation = () => {
     const chain = new ConversationChain({
       llm: llm as any,
       memory,
-      prompt,
+      prompt: prompt as any,
       verbose: true,
     });
     let response: LLMResult["generations"][0] = [];

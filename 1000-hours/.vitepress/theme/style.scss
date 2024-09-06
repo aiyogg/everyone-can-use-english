@@ -161,6 +161,7 @@ body {
 
   p img, p video {
     margin: 0 auto;
+    align-self: center;
   }
 
   blockquote > p{
@@ -208,6 +209,7 @@ body {
     transition: color 0.25s, background-color 0.5s;
     font-family: "CharisSIL", "DejaVu Sans Mono", "Courier New", monospace;
     font-size: var(--vp-code-font-size);
+    // font-size: 100%;
     color: var(--vp-code-color);
     &.alt {
       &::before, &::after {
@@ -223,4 +225,15 @@ audio {
   padding-left: 1em;
   height: 1.8em;
   margin-top: -0.2em;
+}
+
+video, img {
+  width: 95%;
+}
+
+span.not-display {display: none;}
+
+.two-column ol, .two-column ul {
+  column-count: 2;
+  column-gap: 2em;
 }

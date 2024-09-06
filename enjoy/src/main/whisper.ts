@@ -7,6 +7,7 @@ import fs from "fs-extra";
 import log from "@main/logger";
 import url from "url";
 import { enjoyUrlToPath } from "./utils";
+import { t } from "i18next";
 
 const __filename = url.fileURLToPath(import.meta.url);
 /*
@@ -203,6 +204,9 @@ class Whipser {
       "--print-progress",
       "--language",
       model.name.includes("en") ? "en" : language?.split("-")?.[0] || "auto",
+      // `--split-on-word`,
+      // `--max-len`,
+      // "1",
       ...extra,
     ];
 
@@ -225,7 +229,7 @@ class Whipser {
         logger.info(`stderr: ${output}`);
         if (output.startsWith("whisper_print_progress_callback")) {
           const progress = parseInt(output.match(/\d+%/)?.[0] || "0");
-          if (typeof progress === "number") onProgress(progress);
+          if (typeof progress === "number" && onProgress) onProgress(progress);
         }
       });
 
@@ -296,12 +300,19 @@ class Whipser {
     });
 
     ipcMain.handle("whisper-transcribe", async (event, params, options) => {
-      return await this.transcribe(params, {
+      return this.transcribe(params, {
         ...options,
         onProgress: (progress) => {
           event.sender.send("whisper-on-progress", progress);
         },
-      });
+      })
+        .then((result) => {
+          return result;
+        })
+        .catch((err) => {
+          logger.error(err);
+          throw t("whisperTranscribeFailed", { error: err.message });
+        });
     });
 
     ipcMain.handle("whisper-abort", async (_event) => {

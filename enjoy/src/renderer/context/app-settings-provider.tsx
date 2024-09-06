@@ -10,6 +10,7 @@ import { SENTRY_DSN } from "@/constants";
 type AppSettingsProviderState = {
   webApi: Client;
   apiUrl?: string;
+  setApiUrl?: (url: string) => Promise<void>;
   user: UserType | null;
   initialized: boolean;
   version?: string;
@@ -26,8 +27,12 @@ type AppSettingsProviderState = {
   switchLearningLanguage?: (lang: string) => void;
   proxy?: ProxyConfigType;
   setProxy?: (config: ProxyConfigType) => Promise<void>;
+  vocabularyConfig?: VocabularyConfigType;
+  setVocabularyConfig?: (config: VocabularyConfigType) => Promise<void>;
   cable?: Consumer;
   ahoy?: typeof ahoy;
+  recorderConfig?: RecorderConfigType;
+  setRecorderConfig?: (config: RecorderConfigType) => Promise<void>;
   // remote config
   ipaMappings?: { [key: string]: string };
 };
@@ -55,8 +60,11 @@ export const AppSettingsProvider = ({
   const [language, setLanguage] = useState<"en" | "zh-CN">();
   const [nativeLanguage, setNativeLanguage] = useState<string>("zh-CN");
   const [learningLanguage, setLearningLanguage] = useState<string>("en-US");
+  const [vocabularyConfig, setVocabularyConfig] =
+    useState<VocabularyConfigType>(null);
   const [proxy, setProxy] = useState<ProxyConfigType>();
   const EnjoyApp = window.__ENJOY_APP__;
+  const [recorderConfig, setRecorderConfig] = useState<RecorderConfigType>();
   const [ipaMappings, setIpaMappings] = useState<{ [key: string]: string }>(
     IPA_MAPPINGS
   );
@@ -164,10 +172,48 @@ export const AppSettingsProvider = ({
     });
   };
 
+  const setApiUrlHandler = async (url: string) => {
+    EnjoyApp.settings.setApiUrl(url).then(() => {
+      EnjoyApp.app.reload();
+    });
+  };
+
   const createCable = async (token: string) => {
     const wsUrl = await EnjoyApp.app.wsUrl();
     const consumer = createConsumer(wsUrl + "/cable?token=" + token);
     setCable(consumer);
+  };
+
+  const fetchRecorderConfig = async () => {
+    const config = await EnjoyApp.settings.get("recorderConfig");
+    if (config) {
+      setRecorderConfig(config);
+    } else {
+      const defaultConfig: RecorderConfigType = {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 16000,
+        sampleSize: 16,
+      };
+      setRecorderConfigHandler(defaultConfig);
+    }
+  };
+
+  const setRecorderConfigHandler = async (config: RecorderConfigType) => {
+    return EnjoyApp.settings.set("recorderConfig", config).then(() => {
+      setRecorderConfig(config);
+    });
+  };
+
+  const fetchVocabularyConfig = async () => {
+    const config = await EnjoyApp.settings.getVocabularyConfig();
+    setVocabularyConfig(config || { lookupOnMouseOver: false });
+  };
+
+  const setVocabularyConfigHandler = async (config: VocabularyConfigType) => {
+    await EnjoyApp.settings.setVocabularyConfig(config);
+    setVocabularyConfig(config);
   };
 
   useEffect(() => {
@@ -176,7 +222,9 @@ export const AppSettingsProvider = ({
     fetchLibraryPath();
     fetchLanguages();
     fetchProxyConfig();
+    fetchVocabularyConfig();
     initSentry();
+    fetchRecorderConfig();
   }, []);
 
   useEffect(() => {
@@ -220,6 +268,7 @@ export const AppSettingsProvider = ({
         version,
         webApi,
         apiUrl,
+        setApiUrl: setApiUrlHandler,
         user,
         login,
         logout,
@@ -227,9 +276,13 @@ export const AppSettingsProvider = ({
         setLibraryPath: setLibraryPathHandler,
         proxy,
         setProxy: setProxyConfigHandler,
+        vocabularyConfig,
+        setVocabularyConfig: setVocabularyConfigHandler,
         initialized: Boolean(user && libraryPath),
         ahoy,
         cable,
+        recorderConfig,
+        setRecorderConfig: setRecorderConfigHandler,
         ipaMappings,
       }}
     >

@@ -16,7 +16,7 @@ import {
 } from "sequelize-typescript";
 import { Recording, Speech, Transcription, Video } from "@main/db/models";
 import settings from "@main/settings";
-import { AudioFormats, VideoFormats, WEB_API_URL } from "@/constants";
+import { AudioFormats, VideoFormats } from "@/constants";
 import { hashFile } from "@main/utils";
 import path from "path";
 import fs from "fs-extra";
@@ -121,11 +121,15 @@ export class Audio extends Model<Audio> {
 
   @Column(DataType.VIRTUAL)
   get src(): string {
-    return `enjoy://${path.posix.join(
-      "library",
-      "audios",
-      this.getDataValue("md5") + this.extname
-    )}`;
+    if (this.filePath) {
+      return `enjoy://${path.posix.join(
+        "library",
+        "audios",
+        this.getDataValue("md5") + this.extname
+      )}`;
+    } else {
+      return null;
+    }
   }
 
   @Column(DataType.VIRTUAL)
@@ -152,11 +156,17 @@ export class Audio extends Model<Audio> {
   }
 
   get filePath(): string {
-    return path.join(
+    const file = path.join(
       settings.userDataPath(),
       "audios",
       this.getDataValue("md5") + this.extname
     );
+
+    if (fs.existsSync(file)) {
+      return file;
+    } else {
+      return null;
+    }
   }
 
   async upload(force: boolean = false) {
@@ -182,7 +192,7 @@ export class Audio extends Model<Audio> {
     if (this.isSynced) return;
 
     const webApi = new Client({
-      baseUrl: process.env.WEB_API_URL || WEB_API_URL,
+      baseUrl: settings.apiUrl(),
       accessToken: settings.getSync("user.accessToken") as string,
       logger: log.scope("audio/sync"),
     });
@@ -248,7 +258,9 @@ export class Audio extends Model<Audio> {
 
   @AfterDestroy
   static cleanupFile(audio: Audio) {
-    fs.remove(audio.filePath);
+    if (audio.filePath) {
+      fs.remove(audio.filePath);
+    }
     Recording.destroy({
       where: {
         targetId: audio.id,
@@ -263,7 +275,7 @@ export class Audio extends Model<Audio> {
     });
 
     const webApi = new Client({
-      baseUrl: process.env.WEB_API_URL || WEB_API_URL,
+      baseUrl: settings.apiUrl(),
       accessToken: settings.getSync("user.accessToken") as string,
       logger: log.scope("audio/cleanupFile"),
     });

@@ -12,9 +12,13 @@ import {
   TooltipTrigger,
   Button,
   PingPoint,
-  Badge,
 } from "@renderer/components/ui";
-import { EditIcon, TrashIcon, CheckCircleIcon } from "lucide-react";
+import {
+  EditIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  CircleAlertIcon,
+} from "lucide-react";
 import dayjs from "@renderer/lib/dayjs";
 import { secondsToTimestamp } from "@renderer/lib/utils";
 import { Link } from "react-router-dom";
@@ -58,8 +62,17 @@ export const AudiosTable = (props: {
                 <Tooltip>
                   <TooltipTrigger>
                     <Link to={`/audios/${audio.id}`}>
-                      <div className="cursor-pointer truncate max-w-[12rem]">
-                        {audio.name}
+                      <div className="flex items-center space-x-2">
+                        {!audio.src && (
+                          <CircleAlertIcon
+                            data-tooltip-content={t("cannotFindSourceFile")}
+                            data-tooltip-id="global-tooltip"
+                            className="text-destructive w-4 h-4"
+                          />
+                        )}
+                        <div className="cursor-pointer truncate max-w-[12rem]">
+                          {audio.name}
+                        </div>
                       </div>
                     </Link>
                   </TooltipTrigger>
@@ -83,12 +96,10 @@ export const AudiosTable = (props: {
               {dayjs(audio.createdAt).format("YYYY-MM-DD HH:mm")}
             </TableCell>
             <TableCell>
-              {audio.transcribing ? (
-                <PingPoint colorClassName="bg-yellow-500" />
-              ) : audio.transcribed ? (
+              {audio.transcribed ? (
                 <CheckCircleIcon className="text-green-500 w-4 h-4" />
               ) : (
-                <PingPoint colorClassName="bg-gray-500" />
+                <PingPoint colorClassName="bg-gray-500" className="w-2 h-2" />
               )}
             </TableCell>
             <TableCell>

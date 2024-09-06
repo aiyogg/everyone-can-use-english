@@ -27,6 +27,8 @@ AI 是当今世界上最好的外语老师，Enjoy 做 AI 最好的助教。
   <img src="./enjoy/snapshots/assessment.png" alt="Home" width="800" />
 
   <img src="./enjoy/snapshots/course.png" alt="Home" width="800" />
+
+  <img src="./enjoy/snapshots/chat.png" alt="Home" width="800" />
 </div>
 
 ## 开发
@@ -42,7 +44,7 @@ yarn enjoy:start
 
 - [简要说明](https://1000h.org/intro.html)
 - [训练任务](https://1000h.org/training-tasks/kick-off.html)
-- [语音塑造](https://1000h.org/sounds-of-american-english/1-basics.html)
+- [语音塑造](https://1000h.org/sounds-of-american-english/0-intro.html)
 - [大脑内部](https://1000h.org/in-the-brain/01-inifinite.html)
 - [自我训练](https://1000h.org/self-training/00-intro.html)
 
@@ -58,3 +60,7 @@ yarn enjoy:start
 - [第七章：精读](./book/chapter7.md)
 - [第八章：叮嘱](./book/chapter8.md)
 - [后记](./book/end.md)
+
+## 常见问题
+
+请查询 [文档 FAQ](https://1000h.org/enjoy-app/faq.html)。

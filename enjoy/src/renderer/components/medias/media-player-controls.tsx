@@ -34,7 +34,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import cloneDeep from "lodash/cloneDeep";
 import debounce from "lodash/debounce";
 import { AlignmentResult } from "echogarden/dist/api/API.d.js";
-import { TimelineEntry } from "echogarden/dist/utilities/Timeline";
+import { TimelineEntry } from "echogarden/dist/utilities/Timeline.d.js";
 
 const PLAYBACK_RATE_OPTIONS = [0.75, 0.8, 0.9, 1.0];
 export const MediaPlayerControls = () => {
@@ -57,9 +57,7 @@ export const MediaPlayerControls = () => {
     setTranscriptionDraft,
   } = useContext(MediaPlayerProviderContext);
   const { EnjoyApp } = useContext(AppSettingsProviderContext);
-  const { currentHotkeys, enabled } = useContext(
-    HotKeysSettingsProviderContext
-  );
+  const { currentHotkeys } = useContext(HotKeysSettingsProviderContext);
   const [playMode, setPlayMode] = useState<"loop" | "single" | "all">("single");
   const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [grouping, setGrouping] = useState(false);
@@ -220,6 +218,20 @@ export const MediaPlayerControls = () => {
     setActiveRegion(groupRegions[0]);
   };
 
+  const findAndClickElement = (id: string) => {
+    const button = document.getElementById(id);
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const elementAtPoint = document.elementFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2
+    );
+    if (elementAtPoint !== button && !button.contains(elementAtPoint)) return;
+
+    button.click();
+  };
+
   /*
    * Update segmentRegion when currentSegmentIndex is updated
    */
@@ -332,9 +344,8 @@ export const MediaPlayerControls = () => {
       setCurrentSegmentIndex(0);
       return;
     }
-    wavesurfer.seekTo(
-      Math.ceil((segment.startTime / wavesurfer.getDuration()) * 1e8) / 1e8
-    );
+    wavesurfer.setScrollTime(segment.startTime);
+    wavesurfer.setTime(parseFloat(segment.startTime.toFixed(6)));
   }, [decoded, transcription?.id, wavesurfer]);
 
   useEffect(() => {
@@ -372,16 +383,14 @@ export const MediaPlayerControls = () => {
 
     if (currentTime < activeRegion.start || currentTime > activeRegion.end) {
       wavesurfer.setScrollTime(activeRegion.start);
-      wavesurfer.seekTo(
-        Math.ceil((activeRegion.start / wavesurfer.getDuration()) * 1e8) / 1e8
-      );
+      wavesurfer.setTime(parseFloat(activeRegion.start.toFixed(6)));
     }
   }, [wavesurfer, decoded, playMode, activeRegion, currentTime]);
 
   useHotkeys(
     currentHotkeys.PlayOrPause,
     () => {
-      document.getElementById("media-play-or-pause-button").click();
+      findAndClickElement("media-play-or-pause-button");
     },
     {
       preventDefault: true,
@@ -390,7 +399,7 @@ export const MediaPlayerControls = () => {
   useHotkeys(
     currentHotkeys.PlayPreviousSegment,
     () => {
-      document.getElementById("media-play-previous-button").click();
+      findAndClickElement("media-play-previous-button");
     },
     {
       preventDefault: true,
@@ -399,7 +408,7 @@ export const MediaPlayerControls = () => {
   useHotkeys(
     currentHotkeys.PlayNextSegment,
     () => {
-      document.getElementById("media-play-next-button").click();
+      findAndClickElement("media-play-next-button");
     },
     {
       preventDefault: true,
@@ -408,7 +417,7 @@ export const MediaPlayerControls = () => {
   useHotkeys(
     currentHotkeys.StartOrStopRecording,
     () => {
-      document.getElementById("media-record-button").click();
+      findAndClickElement("media-record-button");
     },
     {
       preventDefault: true,
@@ -417,7 +426,35 @@ export const MediaPlayerControls = () => {
   useHotkeys(
     currentHotkeys.Compare,
     () => {
-      document.getElementById("media-compare-button").click();
+      // The button is hidden as default in small screens
+      // It's fine to fire the click event directly even other modal is open
+      document.getElementById("media-compare-button")?.click();
+    },
+    {
+      preventDefault: true,
+    }
+  );
+  useHotkeys(
+    currentHotkeys.IncreasePlaybackRate,
+    () => {
+      setPlaybackRate(
+        PLAYBACK_RATE_OPTIONS[
+          PLAYBACK_RATE_OPTIONS.indexOf(playbackRate) + 1
+        ] ?? playbackRate
+      );
+    },
+    {
+      preventDefault: true,
+    }
+  );
+  useHotkeys(
+    currentHotkeys.DecreasePlaybackRate,
+    () => {
+      setPlaybackRate(
+        PLAYBACK_RATE_OPTIONS[
+          PLAYBACK_RATE_OPTIONS.indexOf(playbackRate) - 1
+        ] ?? playbackRate
+      );
     },
     {
       preventDefault: true,
@@ -505,7 +542,12 @@ export const MediaPlayerControls = () => {
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-96">
-            <div className="mb-4 text-center">{t("playbackRate")}</div>
+            <div
+              id="media-playback-rate-controller"
+              className="mb-4 text-center"
+            >
+              {t("playbackRate")}
+            </div>
             <div className="w-full rounded-full flex items-center justify-between bg-muted">
               {PLAYBACK_RATE_OPTIONS.map((rate, i) => (
                 <div

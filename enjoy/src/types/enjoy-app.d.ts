@@ -1,5 +1,6 @@
 type EnjoyAppType = {
   app: {
+    getPlatformInfo: () => Promise<PlatformInfo>;
     reset: () => Promise<void>;
     resetSettings: () => Promise<void>;
     relaunch: () => Promise<void>;
@@ -12,6 +13,7 @@ type EnjoyAppType = {
     createIssue: (title: string, body: string) => Promise<void>;
     onCmdOutput: (callback: (event, output: string) => void) => void;
     removeCmdOutputListeners: () => void;
+    diskUsage: () => Promise<DiskUsageType>;
     version: string;
   };
   window: {
@@ -76,10 +78,16 @@ type EnjoyAppType = {
   onNotification: (
     callback: (event, notification: NotificationType) => void
   ) => void;
+  lookup: (
+    selection: string,
+    context: string,
+    position: { x: number; y: number }
+  ) => void;
   onLookup: (
     callback: (
-      event,
+      event: IpcRendererEvent,
       selection: string,
+      context: string,
       position: { x: number; y: number }
     ) => void
   ) => void;
@@ -128,6 +136,12 @@ type EnjoyAppType = {
     switchLanguage: (language: string) => Promise<void>;
     getDefaultHotkeys: () => Promise<Record<string, string> | undefined>;
     setDefaultHotkeys: (records: Record<string, string>) => Promise<void>;
+    getDictSettings: () => Promise<DictSettingType>;
+    setDictSettings: (dict: DictSettingType) => Promise<void>;
+    getApiUrl: () => Promise<string>;
+    setApiUrl: (url: string) => Promise<void>;
+    getVocabularyConfig: () => Promise<VocabularyConfigType | undefined>;
+    setVocabularyConfig: (records: VocabularyConfigType) => Promise<void>;
   };
   fs: {
     ensureDir: (path: string) => Promise<boolean>;
@@ -145,6 +159,13 @@ type EnjoyAppType = {
   camdict: {
     lookup: (word: string) => Promise<CamdictWordType | null>;
   };
+  dict: {
+    getDicts: () => Promise<Dict[]>;
+    remove: (dict: Dict) => Promise<void>;
+    getResource: (key: string, dict: Dict) => Promise<string | null>;
+    lookup: (word: string, dict: Dict) => Promise<string | null>;
+    import: (path: string) => Promise<void>;
+  };
   audios: {
     findAll: (params: any) => Promise<AudioType[]>;
     findOne: (params: any) => Promise<AudioType>;
@@ -156,6 +177,7 @@ type EnjoyAppType = {
       id: string,
       params: { startTime: number; endTime: number }
     ) => Promise<string>;
+    cleanUp: () => Promise<void>;
   };
   videos: {
     findAll: (params: any) => Promise<VideoType[]>;
@@ -168,6 +190,7 @@ type EnjoyAppType = {
       id: string,
       params: { startTime: number; endTime: number }
     ) => Promise<string>;
+    cleanUp: () => Promise<void>;
   };
   recordings: {
     findAll: (where: any) => Promise<RecordingType[]>;
@@ -250,6 +273,16 @@ type EnjoyAppType = {
       transcript: string,
       options?: any
     ) => Promise<AlignmentResult>;
+    alignSegments: (
+      input: string | Uint8Array,
+      timeline: Timeline,
+      options?: any
+    ) => Promise<Timeline>;
+    wordToSentenceTimeline: (
+      wordTimeline: Timeline,
+      transcript: string,
+      language: string
+    ) => Promise<Timeline>;
     transcode: (input: string) => Promise<string>;
     check: () => Promise<boolean>;
   };
@@ -283,10 +316,19 @@ type EnjoyAppType = {
       options?: string[]
     ) => Promise<string>;
   };
+  decompress: {
+    onComplete: (callback: (event, task: DecompressTask) => void) => void;
+    onUpdate: (callback: (event, tasks: DecompressTask[]) => void) => void;
+    dashboard: () => Promise<DecompressTask[]>;
+    removeAllListeners: () => void;
+  };
   download: {
     onState: (callback: (event, state) => void) => void;
     start: (url: string, savePath?: string) => Promise<string | undefined>;
     cancel: (filename: string) => Promise<void>;
+    pause: (filename: string) => Promis<void>;
+    resume: (filename: string) => Promise<void>;
+    remove: (filename: string) => Promise<void>;
     cancelAll: () => void;
     dashboard: () => Promise<DownloadStateType[]>;
     removeAllListeners: () => void;
@@ -337,5 +379,26 @@ type EnjoyAppType = {
       parameters?: any;
     }) => Promise<NoteType>;
     sync: (id: string) => Promise<NoteType>;
+  };
+  chats: {
+    findAll: (params: any) => Promise<ChatType[]>;
+    findOne: (params: any) => Promise<ChatType>;
+    create: (params: any) => Promise<ChatType>;
+    update: (id: string, params: any) => Promise<ChatType>;
+    destroy: (id: string) => Promise<void>;
+  };
+  chatAgents: {
+    findAll: (params: any) => Promise<ChatAgentType[]>;
+    findOne: (params: any) => Promise<ChatAgentType>;
+    create: (params: any) => Promise<ChatAgentType>;
+    update: (id: string, params: any) => Promise<ChatAgentType>;
+    destroy: (id: string) => Promise<void>;
+  };
+  chatMessages: {
+    findAll: (params: any) => Promise<ChatMessageType[]>;
+    findOne: (params: any) => Promise<ChatMessageType>;
+    create: (params: any) => Promise<ChatMessageType>;
+    update: (id: string, params: any) => Promise<ChatMessageType>;
+    destroy: (id: string) => Promise<ChatMessageType>;
   };
 };

@@ -16,6 +16,11 @@ import { TimelineEntry } from "echogarden/dist/utilities/Timeline.d.js";
 import { toast } from "@renderer/components/ui";
 import { Tooltip } from "react-tooltip";
 import { debounce } from "lodash";
+import { useAudioRecorder } from "react-audio-voice-recorder";
+import { t } from "i18next";
+
+const ONE_MINUTE = 60;
+const TEN_MINUTES = 10 * ONE_MINUTE;
 
 type MediaPlayerContextType = {
   layout: {
@@ -68,7 +73,7 @@ type MediaPlayerContextType = {
   generateTranscription: (params?: {
     originalText?: string;
     language?: string;
-    service?: WhisperConfigType["service"];
+    service?: WhisperConfigType["service"] | "upload";
     isolate?: boolean;
   }) => Promise<void>;
   transcribing: boolean;
@@ -77,8 +82,16 @@ type MediaPlayerContextType = {
   transcriptionDraft: TranscriptionType["result"];
   setTranscriptionDraft: (result: TranscriptionType["result"]) => void;
   // Recordings
+  startRecording: () => void;
+  stopRecording: () => void;
+  togglePauseResume: () => void;
+  recordingBlob: Blob;
   isRecording: boolean;
-  setIsRecording: (isRecording: boolean) => void;
+  isPaused: boolean;
+  recordingType: string;
+  setRecordingType: (type: string) => void;
+  recordingTime: number;
+  mediaRecorder: MediaRecorder;
   currentRecording: RecordingType;
   setCurrentRecording: (recording: RecordingType) => void;
   recordings: RecordingType[];
@@ -125,7 +138,7 @@ export const MediaPlayerProvider = ({
   children: React.ReactNode;
 }) => {
   const minPxPerSec = 150;
-  const { EnjoyApp, webApi, learningLanguage } = useContext(
+  const { EnjoyApp, learningLanguage, recorderConfig } = useContext(
     AppSettingsProviderContext
   );
 
@@ -163,8 +176,8 @@ export const MediaPlayerProvider = ({
   const [fitZoomRatio, setFitZoomRatio] = useState<number>(1.0);
   const [zoomRatio, setZoomRatio] = useState<number>(1.0);
 
-  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [currentRecording, setCurrentRecording] = useState<RecordingType>(null);
+  const [recordingType, setRecordingType] = useState<string>("segment");
 
   const [transcriptionDraft, setTranscriptionDraft] =
     useState<TranscriptionType["result"]>();
@@ -185,6 +198,19 @@ export const MediaPlayerProvider = ({
     hasMore: hasMoreRecordings,
   } = useRecordings(media, currentSegmentIndex);
 
+  const {
+    startRecording,
+    stopRecording,
+    togglePauseResume,
+    recordingBlob,
+    isRecording,
+    isPaused,
+    recordingTime,
+    mediaRecorder,
+  } = useAudioRecorder(recorderConfig, (exception) => {
+    toast.error(exception.message);
+  });
+
   const { segment, createSegment } = useSegments({
     targetId: media?.id,
     targetType: media?.mediaType,
@@ -194,9 +220,10 @@ export const MediaPlayerProvider = ({
   const getCachedSegmentIndex = async () => {
     if (!media) return;
 
-    const index = await EnjoyApp.cacheObjects.get(
-      `${media.mediaType.toLowerCase()}-${media.id}-last-segment-index`
-    );
+    const cachedId = `${media.mediaType.toLowerCase()}-${
+      media.id
+    }-last-segment-index`;
+    const index = await EnjoyApp.cacheObjects.get(cachedId);
 
     return index || 0;
   };
@@ -204,10 +231,10 @@ export const MediaPlayerProvider = ({
   const setCachedSegmentIndex = (index: number) => {
     if (!media) return;
 
-    return EnjoyApp.cacheObjects.set(
-      `${media.mediaType.toLowerCase()}-${media.id}-last-segment-index`,
-      index
-    );
+    const cachedId = `${media.mediaType.toLowerCase()}-${
+      media.id
+    }-last-segment-index`;
+    return EnjoyApp.cacheObjects.set(cachedId, index);
   };
 
   const { notes, createNote } = useNotes({
@@ -352,7 +379,7 @@ export const MediaPlayerProvider = ({
 
         let phones: TimelineEntry[] = [];
         words.forEach((word: TimelineEntry) => {
-          word.timeline.forEach((token: TimelineEntry) => {
+          word.timeline?.forEach((token: TimelineEntry) => {
             phones = phones.concat(token.timeline);
           });
         });
@@ -436,6 +463,44 @@ export const MediaPlayerProvider = ({
 
   const deboundeCalculateHeight = debounce(calculateHeight, 100);
 
+  const createRecording = async (blob: Blob) => {
+    if (!blob) return;
+    if (!media) return;
+    if (!transcription?.result?.timeline) return;
+
+    let referenceId = -1;
+    let referenceText = transcription.result.timeline
+      .map((s: TimelineEntry) => s.text)
+      .join("\n");
+
+    if (recordingType === "segment") {
+      const currentSegment =
+        transcription?.result?.timeline?.[currentSegmentIndex];
+      if (!currentSegment) return;
+
+      referenceId = currentSegmentIndex;
+      referenceText = currentSegment.text;
+    }
+
+    EnjoyApp.recordings
+      .create({
+        targetId: media.id,
+        targetType: media.mediaType,
+        blob: {
+          type: recordingBlob.type.split(";")[0],
+          arrayBuffer: await blob.arrayBuffer(),
+        },
+        referenceId,
+        referenceText,
+      })
+      .then(() =>
+        toast.success(t("recordingSaved"), { position: "bottom-right" })
+      )
+      .catch((err) =>
+        toast.error(t("failedToSaveRecording" + " : " + err.message))
+      );
+  };
+
   /*
    * When wavesurfer is decoded,
    * set up event listeners for wavesurfer
@@ -472,6 +537,10 @@ export const MediaPlayerProvider = ({
       wavesurfer.on("error", (err: Error) => {
         toast.error(err?.message || "Error occurred while decoding audio");
         setDecodeError(err?.message || "Error occurred while decoding audio");
+        // Reload page when error occurred after decoding
+        if (decoded) {
+          window.location.reload();
+        }
       }),
     ];
 
@@ -558,12 +627,12 @@ export const MediaPlayerProvider = ({
       setDecoded(false);
       setDecodeError(null);
     };
-  }, [media?.src, ref, mediaProvider, layout?.playerHeight]);
+  }, [media?.src, ref?.current, mediaProvider, layout?.playerHeight]);
 
   /* cache last segment index */
   useEffect(() => {
     if (!media) return;
-    if (!currentSegmentIndex) return;
+    if (typeof currentSegmentIndex !== "number") return;
 
     setCachedSegmentIndex(currentSegmentIndex);
   }, [currentSegmentIndex]);
@@ -584,6 +653,24 @@ export const MediaPlayerProvider = ({
       abortGenerateTranscription();
     };
   }, []);
+
+  /**
+   * create recording when recordingBlob is updated
+   */
+  useEffect(() => {
+    createRecording(recordingBlob);
+  }, [recordingBlob]);
+
+  /**
+   * auto stop recording when recording time is over
+   */
+  useEffect(() => {
+    if (recordingType === "segment" && recordingTime >= ONE_MINUTE) {
+      stopRecording();
+    } else if (recordingTime >= TEN_MINUTES) {
+      stopRecording();
+    }
+  }, [recordingTime, recordingType]);
 
   return (
     <>
@@ -620,8 +707,16 @@ export const MediaPlayerProvider = ({
           transcribingOutput,
           transcriptionDraft,
           setTranscriptionDraft,
+          startRecording,
+          stopRecording,
+          togglePauseResume,
+          recordingBlob,
           isRecording,
-          setIsRecording,
+          isPaused,
+          recordingType,
+          setRecordingType,
+          recordingTime,
+          mediaRecorder,
           currentRecording,
           setCurrentRecording,
           recordings,

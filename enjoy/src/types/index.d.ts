@@ -5,21 +5,33 @@ declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
 declare module "compromise-paragraphs";
 
-type SupportedLlmProviderType = "enjoyai" | "openai" | "googleGenerativeAi";
+type SupportedLlmProviderType = "enjoyai" | "openai";
 
 type LlmProviderType = {
-  name?: "enjoyai" | "openai" | "googleGenerativeAi";
+  name?: "enjoyai" | "openai";
   key?: string;
   model?: string;
   baseUrl?: string;
+  models?: string;
 };
 
 type DownloadStateType = {
   name: string;
+  isPaused: boolean;
+  canResume: boolean;
   state: "progressing" | "interrupted" | "completed" | "cancelled";
   received: number;
   total: number;
   speed?: string;
+};
+
+type DecompressTask = {
+  id: string;
+  type: string;
+  title: string;
+  filePath: string;
+  destPath: string;
+  progress?: string;
 };
 
 type NotificationType = {
@@ -68,7 +80,7 @@ type WhisperOutputType = {
     translate: boolean;
   };
   result: {
-    languate: string;
+    language: string;
   };
   systeminfo: string;
   transcription: TranscriptionResultSegmentType[];
@@ -76,6 +88,7 @@ type WhisperOutputType = {
 
 type CfWhipserOutputType = {
   text: string;
+  vtt: string;
   words_count: number;
   words: {
     word: string;
@@ -156,6 +169,10 @@ type ProxyConfigType = {
   url: string;
 };
 
+type VocabularyConfigType = {
+  lookupOnMouseOver: boolean;
+};
+
 type YoutubeVideoType = {
   title: string;
   thumbnail: string;
@@ -174,4 +191,38 @@ type GptEngineSettingType = {
   };
   baseUrl?: string;
   key?: string;
+};
+
+type PlatformInfo = {
+  platform: string;
+  arch: string;
+  version: string;
+};
+
+type DiskUsageType = {
+  name: string;
+  path: string;
+  size: number;
+}[];
+
+type RecorderConfigType = {
+  autoGainControl: boolean;
+  echoCancellation: boolean;
+  noiseSuppression: boolean;
+  sampleRate: number;
+  sampleSize: number;
+};
+
+type DictSettingItem = {
+  name: string;
+  path: string;
+  description: string;
+  isKeyCaseSensitive: string;
+  title: string;
+  resources: string[];
+};
+
+type DictSettingType = {
+  default: string;
+  removing: string[];
 };

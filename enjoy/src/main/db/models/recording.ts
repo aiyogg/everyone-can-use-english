@@ -23,10 +23,9 @@ import { hashFile } from "@main/utils";
 import log from "@main/logger";
 import storage from "@main/storage";
 import { Client } from "@/api";
-import { WEB_API_URL } from "@/constants";
 import echogarden from "@main/echogarden";
 import { t } from "i18next";
-import { Attributes } from "sequelize";
+import { Attributes, Transaction } from "sequelize";
 import { v5 as uuidv5 } from "uuid";
 
 const logger = log.scope("db/models/recording");
@@ -61,7 +60,7 @@ export class Recording extends Model<Recording> {
   targetId: string;
 
   @Column(DataType.STRING)
-  targetType: "Audio" | "Video" | "None";
+  targetType: "Audio" | "Video" | "ChatMessage" | "None";
 
   @HasOne(() => PronunciationAssessment, {
     foreignKey: "targetId",
@@ -144,7 +143,7 @@ export class Recording extends Model<Recording> {
     if (this.isSynced) return;
 
     const webApi = new Client({
-      baseUrl: process.env.WEB_API_URL || WEB_API_URL,
+      baseUrl: settings.apiUrl(),
       accessToken: settings.getSync("user.accessToken") as string,
       logger,
     });
@@ -238,7 +237,7 @@ export class Recording extends Model<Recording> {
   static cleanupFile(recording: Recording) {
     fs.remove(recording.filePath);
     const webApi = new Client({
-      baseUrl: process.env.WEB_API_URL || WEB_API_URL,
+      baseUrl: settings.apiUrl(),
       accessToken: settings.getSync("user.accessToken") as string,
       logger: log.scope("recording/cleanupFile"),
     });
@@ -250,14 +249,14 @@ export class Recording extends Model<Recording> {
       type: string;
       arrayBuffer: ArrayBuffer;
     },
-    params: Partial<Attributes<Recording>>
+    params: Partial<Attributes<Recording>>,
+    transaction?: Transaction
   ) {
     const { targetId, targetType, referenceId, referenceText, language } =
       params;
-    let { duration } = params;
 
     if (blob.arrayBuffer.byteLength === 0) {
-      throw new Error("Empty recording");
+      throw new Error(t("models.recording.cannotDetectAnySound"));
     }
 
     let rawAudio = await echogarden.ensureRawAudio(
@@ -270,10 +269,12 @@ export class Recording extends Model<Recording> {
       0,
       -50
     );
-    trimmedSamples = echogarden.trimAudioEnd(trimmedSamples, 0, -50);
+    trimmedSamples = echogarden.trimAudioEnd(trimmedSamples, 0, -100);
     rawAudio.audioChannels[0] = trimmedSamples;
 
-    duration = Math.round(echogarden.getRawAudioDuration(rawAudio) * 1000);
+    const duration = Math.round(
+      echogarden.getRawAudioDuration(rawAudio) * 1000
+    );
 
     if (duration === 0) {
       throw new Error(t("models.recording.cannotDetectAnySound"));
@@ -305,17 +306,22 @@ export class Recording extends Model<Recording> {
     const userId = settings.getSync("user.id");
     const id = uuidv5(`${userId}/${md5}`, uuidv5.URL);
 
-    return this.create({
-      id,
-      targetId,
-      targetType,
-      filename,
-      duration,
-      md5,
-      referenceId,
-      referenceText,
-      language,
-    });
+    return this.create(
+      {
+        id,
+        targetId,
+        targetType,
+        filename,
+        duration,
+        md5,
+        referenceId,
+        referenceText,
+        language,
+      },
+      {
+        transaction,
+      }
+    );
   }
 
   static notify(recording: Recording, action: "create" | "update" | "destroy") {

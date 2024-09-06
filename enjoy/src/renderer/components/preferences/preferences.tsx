@@ -2,6 +2,7 @@ import { t } from "i18next";
 import { Button, ScrollArea, Separator } from "@renderer/components/ui";
 import {
   About,
+  ApiUrlSettings,
   Appearance,
   DefaultEngineSettings,
   Hotkeys,
@@ -11,11 +12,14 @@ import {
   WhisperSettings,
   OpenaiSettings,
   ProxySettings,
-  GoogleGenerativeAiSettings,
   ResetSettings,
   ResetAllSettings,
   NativeLanguageSettings,
   LearningLanguageSettings,
+  NetworkState,
+  RecorderSettings,
+  VocabularySettings,
+  DictSettings,
 } from "@renderer/components";
 import { useState } from "react";
 import { Tooltip } from "react-tooltip";
@@ -41,7 +45,20 @@ export const Preferences = () => {
           <Separator />
           <OpenaiSettings />
           <Separator />
-          <GoogleGenerativeAiSettings />
+        </div>
+      ),
+    },
+    {
+      value: "dict",
+      label: t("dictSettingsShort"),
+      component: () => (
+        <div className="pr-1">
+          <div className="font-semibold mb-4 capitilized">
+            {t("dictSettings")}
+          </div>
+          <VocabularySettings />
+          <Separator />
+          <DictSettings />
           <Separator />
         </div>
       ),
@@ -54,7 +71,13 @@ export const Preferences = () => {
           <div className="font-semibold mb-4 capitilized">
             {t("advancedSettings")}
           </div>
+          <ApiUrlSettings />
+          <Separator />
           <ProxySettings />
+          <Separator />
+          <NetworkState />
+          <Separator />
+          <RecorderSettings />
           <Separator />
           <ResetSettings />
           <Separator />

@@ -32,6 +32,7 @@ import {
   NotebookPenIcon,
   SpeechIcon,
   GraduationCapIcon,
+  MessagesSquareIcon,
 } from "lucide-react";
 import { useLocation, Link } from "react-router-dom";
 import { t } from "i18next";
@@ -70,6 +71,14 @@ export const Sidebar = () => {
               tooltip={t("sidebar.home")}
               active={activeTab === "/"}
               Icon={HomeIcon}
+            />
+
+            <SidebarItem
+              href="/chats"
+              label={t("sidebar.chats")}
+              tooltip={t("sidebar.chats")}
+              active={activeTab.startsWith("/chats")}
+              Icon={MessagesSquareIcon}
             />
 
             <SidebarItem
@@ -191,7 +200,7 @@ export const Sidebar = () => {
           </div>
         </ScrollArea>
 
-        <div className="w-full absolute bottom-0 px-1 xl:px-4 py-2">
+        <div className="w-full absolute bottom-0 px-1 xl:px-2 py-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
