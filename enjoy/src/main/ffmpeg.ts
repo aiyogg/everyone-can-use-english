@@ -249,22 +249,109 @@ export default class FfmpegWrapper {
     return new Promise((resolve, reject) => {
       ffmpeg
         .input(input)
+        .outputOptions("-ss", startTime.toString(), "-to", endTime.toString())
+        .on("start", (commandLine) => {
+          logger.info("Spawned FFmpeg with command: " + commandLine);
+          fs.ensureDirSync(path.dirname(output));
+        })
+        .on("end", () => {
+          logger.info(`File "${output}" created`);
+          resolve(output);
+        })
+        .on("error", (err) => {
+          logger.error(err);
+          reject(err);
+        })
+        .save(output);
+    });
+  }
+
+  // Concatenate videos or audios into a single file
+  concat(inputs: string[], output: string) {
+    let command = Ffmpeg();
+    inputs.forEach((input) => {
+      command = command.input(input);
+    });
+    return new Promise((resolve, reject) => {
+      command
+        .on("start", (commandLine) => {
+          logger.info("Spawned FFmpeg with command: " + commandLine);
+          fs.ensureDirSync(path.dirname(output));
+        })
+        .on("end", () => {
+          logger.info(`File "${output}" created`);
+          resolve(output);
+        })
+        .on("error", (err) => {
+          logger.error(err);
+          reject(err);
+        })
+        .mergeToFile(output, settings.cachePath());
+    });
+  }
+
+  compressVideo(input: string, output: string) {
+    const ffmpeg = Ffmpeg();
+    return new Promise((resolve, reject) => {
+      ffmpeg
+        .input(input)
         .outputOptions(
-          "-ss",
-          startTime.toString(),
-          "-to",
-          endTime.toString()
+          "-c:v",
+          "libx264",
+          "-tag:v",
+          "avc1",
+          "-movflags",
+          "faststart",
+          "-crf",
+          "30",
+          "-preset",
+          "superfast",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k"
         )
         .on("start", (commandLine) => {
           logger.info("Spawned FFmpeg with command: " + commandLine);
           fs.ensureDirSync(path.dirname(output));
         })
         .on("end", () => {
-          logger.info(`File ${output} created`);
+          logger.info(`File "${output}" created`);
           resolve(output);
         })
         .on("error", (err) => {
           logger.error(err);
+          reject(err);
+        })
+        .save(output);
+    });
+  }
+
+  compressAudio(input: string, output: string) {
+    const ffmpeg = Ffmpeg();
+    return new Promise((resolve, reject) => {
+      ffmpeg
+        .input(input)
+        .outputOptions(
+          "-ar",
+          "16000",
+          "-b:a",
+          "32000",
+          "-ac",
+          "1",
+          "-preset",
+          "superfast"
+        )
+        .on("start", (commandLine) => {
+          logger.info("Spawned FFmpeg with command: " + commandLine);
+          fs.ensureDirSync(path.dirname(output));
+        })
+        .on("end", () => {
+          logger.info(`File "${output}" created`);
+          resolve(output);
+        })
+        .on("error", (err) => {
+          logger.error(err.message);
           reject(err);
         })
         .save(output);

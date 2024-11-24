@@ -2,23 +2,14 @@ import { app, BrowserWindow, protocol, net } from "electron";
 import path from "path";
 import fs from "fs-extra";
 import settings from "@main/settings";
-import "@main/i18n";
 import log from "@main/logger";
 import mainWindow from "@main/window";
 import ElectronSquirrelStartup from "electron-squirrel-startup";
 import contextMenu from "electron-context-menu";
 import { t } from "i18next";
-import * as Sentry from "@sentry/electron/main";
-import { SENTRY_DSN } from "@/constants";
 import { updateElectronApp, UpdateSourceType } from "update-electron-app";
 
 const logger = log.scope("main");
-
-if (app.isPackaged) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-  });
-}
 
 app.commandLine.appendSwitch("enable-features", "SharedArrayBuffer");
 
@@ -126,7 +117,11 @@ app.on("ready", async () => {
 
   protocol.handle("enjoy", (request) => {
     let url = request.url.replace("enjoy://", "");
-    if (url.match(/library\/(audios|videos|recordings|speeches|segments)/g)) {
+    if (
+      url.match(
+        /library\/(audios|videos|recordings|speeches|segments|documents)/g
+      )
+    ) {
       url = url.replace("library/", "");
       url = path.join(settings.userDataPath(), url);
     } else if (url.startsWith("library")) {

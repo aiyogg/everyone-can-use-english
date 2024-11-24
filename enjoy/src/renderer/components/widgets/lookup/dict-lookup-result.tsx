@@ -32,8 +32,7 @@ export function DictLookupResult({
 }) {
   const { colorScheme } = useContext(ThemeProviderContext);
   const initialContent = `<!DOCTYPE html><html class=${colorScheme}><head></head><body></body></html>`;
-  const { EnjoyApp } = useContext(AppSettingsProviderContext);
-  const { currentDict } = useContext(DictProviderContext);
+  const { currentDict, lookup } = useContext(DictProviderContext);
   const [definition, setDefinition] = useState("");
   const [looking, setLooking] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -42,11 +41,11 @@ export function DictLookupResult({
 
   useEffect(() => {
     if (currentDict && word) {
-      lookup();
+      handleLookup();
     }
   }, [currentDict, word]);
 
-  async function lookup() {
+  async function handleLookup() {
     revoke();
     setLooking(true);
 
@@ -56,8 +55,7 @@ export function DictLookupResult({
 
     const _word = word.trim().indexOf(" ") > -1 ? word : word.toLowerCase();
 
-    EnjoyApp.dict
-      .lookup(_word, currentDict)
+    lookup(_word, currentDict)
       .then((result) => {
         if (!result) {
           setNotFound(true);
@@ -134,8 +132,7 @@ export const DictLookupResultInner = ({
   onJump?: (v: string) => void;
   onResize?: (v: number) => void;
 }) => {
-  const { EnjoyApp } = useContext(AppSettingsProviderContext);
-  const { currentDict } = useContext(DictProviderContext);
+  const { currentDict, getResource } = useContext(DictProviderContext);
   const { document: innerDocument } = useFrame();
   const [html, setHtml] = useState("");
   const [hash, setHash] = useState("");
@@ -178,7 +175,7 @@ export const DictLookupResultInner = ({
   };
 
   const handleReadResource = async (key: string) => {
-    return EnjoyApp.dict.getResource(key, currentDict);
+    return getResource(key, currentDict);
   };
 
   const normalizer = new DictDefinitionNormalizer({
@@ -191,7 +188,8 @@ export const DictLookupResultInner = ({
     setHtml(html);
   }
 
-  async function handlePlayAudio(audio: Element) {
+  async function handlePlayAudio(e: Event, audio: Element) {
+    e.preventDefault();
     const href = audio.getAttribute("data-source");
     const data = await handleReadResource(href);
     const ext: string = getExtension(href, "wav");
@@ -201,7 +199,8 @@ export const DictLookupResultInner = ({
     _audio.play();
   }
 
-  function handleJump(el: Element) {
+  function handleJump(e: Event, el: Element) {
+    e.preventDefault();
     const word = el.getAttribute("data-word");
     const hash = el.getAttribute("data-hash");
     onJump?.(word);
@@ -222,12 +221,12 @@ export const DictLookupResultInner = ({
     if (!audios.length) return;
 
     audios.forEach((audio: Element) => {
-      audio.addEventListener("click", () => handlePlayAudio(audio));
+      audio.addEventListener("click", (e) => handlePlayAudio(e, audio));
     });
 
     return () => {
       audios.forEach((audio: Element) => {
-        audio.removeEventListener("click", () => handlePlayAudio(audio));
+        audio.removeEventListener("click", (e) => handlePlayAudio(e, audio));
       });
     };
   };
@@ -237,12 +236,12 @@ export const DictLookupResultInner = ({
     if (!links.length) return;
 
     links.forEach((el: Element) => {
-      el.addEventListener("click", () => handleJump(el));
+      el.addEventListener("click", (e) => handleJump(e, el));
     });
 
     return () => {
       links.forEach((el: Element) => {
-        el.removeEventListener("click", () => handleJump(el));
+        el.removeEventListener("click", (e) => handleJump(e, el));
       });
     };
   };

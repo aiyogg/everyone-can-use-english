@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import * as Echogarden from "echogarden/dist/api/API.js";
-import { AlignmentOptions } from "echogarden/dist/api/API";
+import { AlignmentOptions, RecognitionOptions } from "echogarden/dist/api/API";
 import {
   encodeRawAudioToWave,
   decodeWaveToRawAudio,
@@ -15,6 +15,8 @@ import {
   type Timeline,
   type TimelineEntry,
 } from "echogarden/dist/utilities/Timeline.d.js";
+import { WhisperOptions } from "echogarden/dist/recognition/WhisperSTT.js";
+import { ensureAndGetPackagesDir } from "echogarden/dist/utilities/PackageManager.js";
 import path from "path";
 import log from "@main/logger";
 import url from "url";
@@ -27,6 +29,10 @@ Echogarden.setGlobalOption(
   "ffmpegPath",
   ffmpegPath.replace("app.asar", "app.asar.unpacked")
 );
+Echogarden.setGlobalOption(
+  "packageBaseURL",
+  "https://hf-mirror.com/echogarden/echogarden-packages/resolve/main/"
+);
 
 const __filename = url.fileURLToPath(import.meta.url);
 /*
@@ -38,6 +44,7 @@ const __dirname = path
 
 const logger = log.scope("echogarden");
 class EchogardenWrapper {
+  public recognize: typeof Echogarden.recognize;
   public align: typeof Echogarden.align;
   public alignSegments: typeof Echogarden.alignSegments;
   public denoise: typeof Echogarden.denoise;
@@ -50,6 +57,33 @@ class EchogardenWrapper {
   public wordTimelineToSegmentSentenceTimeline: typeof wordTimelineToSegmentSentenceTimeline;
 
   constructor() {
+    this.recognize = (sampleFile: string, options: RecognitionOptions) => {
+      return new Promise((resolve, reject) => {
+        const handler = (reason: any) => {
+          // Remove the handler after it's triggered
+          process.removeListener("unhandledRejection", handler);
+          reject(reason);
+        };
+
+        // Add temporary unhandledRejection listener
+        process.on("unhandledRejection", handler);
+
+        // Set the whisper executable path for macOS
+        if (process.platform === "darwin") {
+          options.whisperCpp = options.whisperCpp || {};
+          options.whisperCpp.executablePath = path.join(__dirname, "lib", "whisper", "main");
+        }
+
+        // Call the original recognize function
+        Echogarden.recognize(sampleFile, options)
+          .then((result) => {
+            // Remove the handler if successful
+            process.removeListener("unhandledRejection", handler);
+            resolve(result);
+          })
+          .catch(reject);
+      });
+    };
     this.align = Echogarden.align;
     this.alignSegments = Echogarden.alignSegments;
     this.denoise = Echogarden.denoise;
@@ -63,25 +97,38 @@ class EchogardenWrapper {
       wordTimelineToSegmentSentenceTimeline;
   }
 
-  async check() {
+  async check(
+    options: RecognitionOptions = {
+      engine: "whisper",
+      whisper: {
+        model: "tiny.en",
+      },
+      whisperCpp: {
+        model: "tiny.en",
+      }
+    }
+  ) {
     const sampleFile = path.join(__dirname, "samples", "jfk.wav");
+
     try {
-      const result = await this.align(
-        sampleFile,
-        "And so my fellow Americans ask not what your country can do for you",
-        {}
-      );
-      logger.info(result);
+      logger.info("check:", options);
+      const result = await this.recognize(sampleFile, options);
+      logger.info("transcript:", result?.transcript);
       fs.writeJsonSync(
         path.join(settings.cachePath(), "echogarden-check.json"),
         result,
         { spaces: 2 }
       );
 
-      return true;
+      const timeline = await this.align(sampleFile, result.transcript, {
+        language: "en",
+      });
+      logger.info("timeline:", !!timeline);
+
+      return { success: true, log: "" };
     } catch (e) {
       logger.error(e);
-      return false;
+      return { success: false, log: e.message };
     }
   }
 
@@ -102,6 +149,20 @@ class EchogardenWrapper {
   }
 
   registerIpcHandlers() {
+    ipcMain.handle(
+      "echogarden-recognize",
+      async (_event, url: string, options: RecognitionOptions) => {
+        logger.debug("echogarden-recognize:", options);
+        try {
+          const input = enjoyUrlToPath(url);
+          return await this.recognize(input, options);
+        } catch (err) {
+          logger.error(err);
+          throw err;
+        }
+      }
+    );
+
     ipcMain.handle(
       "echogarden-align",
       async (
@@ -129,6 +190,9 @@ class EchogardenWrapper {
         options: AlignmentOptions
       ) => {
         logger.debug("echogarden-align-segments:", timeline, options);
+        if (typeof input === "string") {
+          input = enjoyUrlToPath(input);
+        }
         try {
           const rawAudio = await this.ensureRawAudio(input, 16000);
           return await this.alignSegments(rawAudio, timeline, options);
@@ -182,8 +246,12 @@ class EchogardenWrapper {
       }
     );
 
-    ipcMain.handle("echogarden-check", async (_event) => {
-      return this.check();
+    ipcMain.handle("echogarden-check", async (_event, options: any) => {
+      return this.check(options);
+    });
+
+    ipcMain.handle("echogarden-get-packages-dir", async (_event) => {
+      return ensureAndGetPackagesDir();
     });
   }
 }

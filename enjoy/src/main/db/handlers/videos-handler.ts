@@ -68,6 +68,7 @@ class VideosHandler {
       name?: string;
       coverUrl?: string;
       md5?: string;
+      compressing?: boolean;
     } = {}
   ) {
     let file = uri;
@@ -177,6 +178,17 @@ class VideosHandler {
     ipcMain.handle("videos-upload", this.upload);
     ipcMain.handle("videos-crop", this.crop);
     ipcMain.handle("videos-clean-up", this.cleanUp);
+  }
+
+  unregister() {
+    ipcMain.removeHandler("videos-find-all");
+    ipcMain.removeHandler("videos-find-one");
+    ipcMain.removeHandler("videos-create");
+    ipcMain.removeHandler("videos-update");
+    ipcMain.removeHandler("videos-destroy");
+    ipcMain.removeHandler("videos-upload");
+    ipcMain.removeHandler("videos-crop");
+    ipcMain.removeHandler("videos-clean-up");
   }
 }
 

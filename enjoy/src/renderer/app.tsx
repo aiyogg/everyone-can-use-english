@@ -5,6 +5,7 @@ import {
   DbProvider,
   HotKeysSettingsProvider,
   DictProvider,
+  CopilotProvider,
 } from "@renderer/context";
 import router from "./router";
 import { RouterProvider } from "react-router-dom";
@@ -35,21 +36,23 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
-      <AppSettingsProvider>
-        <HotKeysSettingsProvider>
-          <AISettingsProvider>
-            <DictProvider>
-              <DbProvider>
-                <RouterProvider router={router} />
+      <DbProvider>
+        <AppSettingsProvider>
+          <HotKeysSettingsProvider>
+            <AISettingsProvider>
+              <DictProvider>
+                <CopilotProvider>
+                  <RouterProvider router={router} />
+                </CopilotProvider>
                 <Toaster richColors closeButton position="top-center" />
                 <Tooltip id="global-tooltip" />
                 <TranslateWidget />
                 <LookupWidget />
-              </DbProvider>
-            </DictProvider>
-          </AISettingsProvider>
-        </HotKeysSettingsProvider>
-      </AppSettingsProvider>
+              </DictProvider>
+            </AISettingsProvider>
+          </HotKeysSettingsProvider>
+        </AppSettingsProvider>
+      </DbProvider>
     </ThemeProvider>
   );
 }

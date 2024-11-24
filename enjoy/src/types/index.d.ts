@@ -3,6 +3,8 @@
 // whether you're running in development or production).
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
+declare module "foliate-js/view.js";
+declare module "foliate-js/epub.js";
 declare module "compromise-paragraphs";
 
 type SupportedLlmProviderType = "enjoyai" | "openai";
@@ -40,7 +42,7 @@ type NotificationType = {
 };
 
 type WhisperConfigType = {
-  service: "local" | "azure" | "cloudflare" | "openai";
+  // service: "local" | "azure" | "cloudflare" | "openai";
   availableModels: {
     type: string;
     name: string;
@@ -193,6 +195,15 @@ type GptEngineSettingType = {
   key?: string;
 };
 
+type TtsEngineSettingType = {
+  name: string;
+  model: string;
+  voice: string;
+  language?: string;
+  baseUrl?: string;
+  key?: string;
+};
+
 type PlatformInfo = {
   platform: string;
   arch: string;
@@ -213,16 +224,56 @@ type RecorderConfigType = {
   sampleSize: number;
 };
 
-type DictSettingItem = {
-  name: string;
-  path: string;
-  description: string;
-  isKeyCaseSensitive: string;
-  title: string;
-  resources: string[];
+type DictType = "dict" | "mdict" | "preset";
+
+type DictItem = {
+  type: DictType;
+  text: string;
+  value: string;
 };
 
 type DictSettingType = {
   default: string;
   removing: string[];
+  mdicts: MDict[];
+};
+
+type TranscribeParamsType = {
+  mediaSrc: string | Blob;
+  params?: {
+    targetId?: string;
+    targetType?: string;
+    originalText?: string;
+    language: string;
+    service: SttEngineOptionEnum | "upload";
+    isolate?: boolean;
+    align?: boolean;
+  };
+};
+
+type TranscribeResultType = {
+  engine: string;
+  model: string;
+  transcript: string;
+  timeline: TimelineEntry[];
+  originalText?: string;
+  tokenId?: number;
+  url: string;
+};
+
+type EchogardenSttConfigType = {
+  engine: "whisper" | "whisper.cpp";
+  whisper: {
+    model: string;
+    temperature?: number;
+    prompt?: string;
+    encoderProvider?: "cpu" | "dml" | "cuda";
+    decoderProvider?: "cpu" | "dml" | "cuda";
+  };
+  whisperCpp?: {
+    model: string;
+    temperature?: number;
+    prompt?: string;
+    enableGPU?: boolean;
+  };
 };

@@ -13,9 +13,15 @@ import {
   DataType,
   Unique,
   HasOne,
+  Scopes,
 } from "sequelize-typescript";
 import mainWindow from "@main/window";
-import { Audio, PronunciationAssessment, Video } from "@main/db/models";
+import {
+  Audio,
+  PronunciationAssessment,
+  UserSetting,
+  Video,
+} from "@main/db/models";
 import fs from "fs-extra";
 import path from "path";
 import settings from "@main/settings";
@@ -25,8 +31,9 @@ import storage from "@main/storage";
 import { Client } from "@/api";
 import echogarden from "@main/echogarden";
 import { t } from "i18next";
-import { Attributes, Transaction } from "sequelize";
+import { Attributes, Op, Transaction } from "sequelize";
 import { v5 as uuidv5 } from "uuid";
+import FfmpegWrapper from "@main/ffmpeg";
 
 const logger = log.scope("db/models/recording");
 
@@ -36,6 +43,20 @@ const logger = log.scope("db/models/recording");
   underscored: true,
   timestamps: true,
 })
+@Scopes(() => ({
+  withoutDeleted: {
+    where: {
+      deletedAt: null,
+    },
+  },
+  onlyDeleted: {
+    where: {
+      deletedAt: {
+        [Op.not]: null,
+      },
+    },
+  },
+}))
 export class Recording extends Model<Recording> {
   @IsUUID("all")
   @Default(DataType.UUIDV4)
@@ -91,6 +112,9 @@ export class Recording extends Model<Recording> {
   @Column(DataType.DATE)
   uploadedAt: Date;
 
+  @Column(DataType.DATE)
+  deletedAt: Date;
+
   @Column(DataType.VIRTUAL)
   get isSynced(): boolean {
     return Boolean(this.syncedAt) && this.syncedAt >= this.updatedAt;
@@ -102,7 +126,14 @@ export class Recording extends Model<Recording> {
   }
 
   @Column(DataType.VIRTUAL)
+  get isDeleted(): boolean {
+    return Boolean(this.deletedAt);
+  }
+
+  @Column(DataType.VIRTUAL)
   get src(): string {
+    if (!this.filePath) return;
+
     return `enjoy://${path.posix.join(
       "library",
       "recordings",
@@ -111,11 +142,25 @@ export class Recording extends Model<Recording> {
   }
 
   get filePath(): string {
-    return path.join(
+    const file = path.join(
       settings.userDataPath(),
       "recordings",
       this.getDataValue("filename")
     );
+    if (fs.existsSync(file)) {
+      return file;
+    }
+
+    return null;
+  }
+
+  async softDelete() {
+    await this.update({
+      deletedAt: new Date(),
+    });
+    if (this.filePath) {
+      fs.remove(this.filePath);
+    }
   }
 
   async upload(force: boolean = false) {
@@ -128,7 +173,7 @@ export class Recording extends Model<Recording> {
       .then((result) => {
         logger.debug("upload result:", result.data);
         if (result.data.success) {
-          this.update({ uploadedAt: new Date() });
+          this.update({ uploadedAt: new Date() }, { hooks: false });
         } else {
           throw new Error(result.data);
         }
@@ -144,12 +189,12 @@ export class Recording extends Model<Recording> {
 
     const webApi = new Client({
       baseUrl: settings.apiUrl(),
-      accessToken: settings.getSync("user.accessToken") as string,
+      accessToken: (await UserSetting.accessToken()) as string,
       logger,
     });
 
     return webApi.syncRecording(this.toJSON()).then(() => {
-      this.update({ syncedAt: new Date() });
+      this.update({ syncedAt: new Date() }, { hooks: false });
     });
   }
 
@@ -234,11 +279,11 @@ export class Recording extends Model<Recording> {
   }
 
   @AfterDestroy
-  static cleanupFile(recording: Recording) {
+  static async cleanupFile(recording: Recording) {
     fs.remove(recording.filePath);
     const webApi = new Client({
       baseUrl: settings.apiUrl(),
-      accessToken: settings.getSync("user.accessToken") as string,
+      accessToken: (await UserSetting.accessToken()) as string,
       logger: log.scope("recording/cleanupFile"),
     });
     webApi.deleteRecording(recording.id);
@@ -294,14 +339,10 @@ export class Recording extends Model<Recording> {
     }
 
     // rename file
-    const filename = `${md5}.wav`;
-    fs.moveSync(
-      file,
-      path.join(settings.userDataPath(), "recordings", filename),
-      {
-        overwrite: true,
-      }
-    );
+    const filename = `${md5}.mp3`;
+    const destFile = path.join(settings.userDataPath(), "recordings", filename);
+    const ffmpeg = new FfmpegWrapper();
+    await ffmpeg.compressAudio(file, destFile);
 
     const userId = settings.getSync("user.id");
     const id = uuidv5(`${userId}/${md5}`, uuidv5.URL);

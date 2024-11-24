@@ -12,9 +12,7 @@ import path from "path";
 import db from "@main/db";
 import settings from "@main/settings";
 import downloader from "@main/downloader";
-import whisper from "@main/whisper";
 import fs from "fs-extra";
-import "@main/i18n";
 import log from "@main/logger";
 import { REPO_URL, WS_URL } from "@/constants";
 import { AudibleProvider, TedProvider, YoutubeProvider } from "@main/providers";
@@ -24,7 +22,11 @@ import url from "url";
 import echogarden from "./echogarden";
 import camdict from "./camdict";
 import dict from "./dict";
+import mdict from "./mdict";
 import decompresser from "./decompresser";
+import { UserSetting } from "@main/db/models";
+import { platform } from "os";
+import { t } from "i18next";
 
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,7 +44,7 @@ const main = {
   init: () => {},
 };
 
-main.init = () => {
+main.init = async () => {
   if (main.win) {
     main.win.show();
     return;
@@ -53,15 +55,13 @@ main.init = () => {
 
   camdict.registerIpcHandlers();
   dict.registerIpcHandlers();
+  mdict.registerIpcHandlers();
 
   // Prepare Settings
   settings.registerIpcHandlers();
 
   // echogarden
   echogarden.registerIpcHandlers();
-
-  // Whisper
-  whisper.registerIpcHandlers();
 
   // Waveform
   waveform.registerIpcHandlers();
@@ -102,10 +102,21 @@ main.init = () => {
       throw new Error("Invalid proxy config");
     }
 
-    if (config) {
-      if (!config.url) {
-        config.enabled = false;
-      }
+    if (config && !config.url) {
+      config.enabled = false;
+    }
+
+    return settings.setSync("proxy", config);
+  });
+
+  ipcMain.handle("system-proxy-refresh", (_event) => {
+    let config = settings.getSync("proxy") as ProxyConfigType;
+    if (!config) {
+      config = {
+        enabled: false,
+        url: "",
+      };
+      settings.setSync("proxy", config);
     }
 
     if (config.enabled && config.url) {
@@ -122,8 +133,6 @@ main.init = () => {
       });
       mainWindow.webContents.session.closeAllConnections();
     }
-
-    return settings.setSync("proxy", config);
   });
 
   // BrowserView
@@ -250,7 +259,32 @@ main.init = () => {
     view.setVisible(false);
     mainWindow.contentView.addChildView(view);
 
+    // Add timeout handler
+    const timeout = setTimeout(() => {
+      logger.debug("view-scrape timeout", url);
+      event.sender.send("view-on-state", {
+        state: "did-fail-load",
+        error: "Request timed out",
+        url: url,
+      });
+      (view.webContents as any)?.destroy();
+      mainWindow.contentView.removeChildView(view);
+    }, 30000); // 30 second timeout
+
+    view.webContents.on("did-start-loading", () => {
+      logger.debug("view-scrape did-start-loading", url);
+    });
+
+    view.webContents.on("did-stop-loading", () => {
+      logger.debug("view-scrape did-stop-loading", url);
+    });
+
+    view.webContents.on("dom-ready", () => {
+      logger.debug("view-scrape dom-ready", url);
+    });
+
     view.webContents.on("did-navigate", (_event, url) => {
+      clearTimeout(timeout);
       event.sender.send("view-on-state", {
         state: "did-navigate",
         url,
@@ -259,6 +293,7 @@ main.init = () => {
     view.webContents.on(
       "did-fail-load",
       (_event, _errorCode, errrorDescription, validatedURL) => {
+        clearTimeout(timeout);
         event.sender.send("view-on-state", {
           state: "did-fail-load",
           error: errrorDescription,
@@ -269,19 +304,31 @@ main.init = () => {
       }
     );
     view.webContents.on("did-finish-load", () => {
+      clearTimeout(timeout);
+      logger.debug("view-scrape did-finish-load", url);
       view.webContents
         .executeJavaScript(`document.documentElement.innerHTML`)
         .then((html) => {
           event.sender.send("view-on-state", {
             state: "did-finish-load",
             html,
+            url,
           });
           (view.webContents as any).destroy();
           mainWindow.contentView.removeChildView(view);
         });
     });
 
-    view.webContents.loadURL(url);
+    view.webContents.loadURL(url).catch((err) => {
+      logger.error("view-scrape loadURL error", err);
+      (view.webContents as any).destroy();
+      mainWindow.contentView.removeChildView(view);
+      event.sender.send("view-on-state", {
+        state: "did-fail-load",
+        error: err.message,
+        url: url,
+      });
+    });
   });
 
   // App options
@@ -293,8 +340,12 @@ main.init = () => {
     };
   });
 
-  ipcMain.handle("app-reset", () => {
-    fs.removeSync(settings.userDataPath());
+  ipcMain.handle("app-reset", async () => {
+    const userDataPath = settings.userDataPath();
+
+    await db.disconnect();
+
+    fs.removeSync(userDataPath);
     fs.removeSync(settings.file());
 
     app.relaunch();
@@ -302,10 +353,7 @@ main.init = () => {
   });
 
   ipcMain.handle("app-reset-settings", () => {
-    fs.removeSync(settings.file());
-
-    app.relaunch();
-    app.exit();
+    UserSetting.clear();
   });
 
   ipcMain.handle("app-relaunch", () => {
@@ -399,20 +447,23 @@ ${log}
       segments: path.join(settings.userDataPath(), "segments"),
       speeches: path.join(settings.userDataPath(), "speeches"),
       recordings: path.join(settings.userDataPath(), "recordings"),
-      whisper: path.join(settings.libraryPath(), "whisper"),
       waveforms: path.join(settings.libraryPath(), "waveforms"),
       logs: path.join(settings.libraryPath(), "logs"),
       cache: settings.cachePath(),
     };
 
     const sizeSync = (p: string): number => {
-      const stat = fs.statSync(p);
-      if (stat.isFile()) return stat.size;
-      else if (stat.isDirectory())
-        return fs
-          .readdirSync(p)
-          .reduce((a, e) => a + sizeSync(path.join(p, e)), 0);
-      else return 0; // can't take size of a stream/symlink/socket/
+      try {
+        const stat = fs.statSync(p);
+        if (stat.isFile()) return stat.size;
+        else if (stat.isDirectory())
+          return fs
+            .readdirSync(p)
+            .reduce((a, e) => a + sizeSync(path.join(p, e)), 0);
+        else return 0; // can't take size of a stream/symlink/socket/
+      } catch (error) {
+        return 0; // Return 0 if path doesn't exist or there's any other error
+      }
     };
 
     return Object.keys(paths).map((key) => {
@@ -464,7 +515,9 @@ ${log}
 
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    icon: "./assets/icon.png",
+    show: false,
+    icon:
+      process.platform === "win32" ? "./assets/icon.ico" : "./assets/icon.png",
     width: 1280,
     height: 720,
     minWidth: 800,
@@ -473,10 +526,81 @@ ${log}
       preload: path.join(__dirname, "preload.js"),
       spellcheck: false,
     },
+    frame: false,
+    titleBarStyle: "hidden",
+    titleBarOverlay: process.platform === "darwin",
+    trafficLightPosition: {
+      x: 10,
+      y: 8,
+    },
+    useContentSize: true,
+  });
+
+  mainWindow.on("ready-to-show", () => {
+    mainWindow.show();
   });
 
   mainWindow.on("resize", () => {
-    mainWindow.webContents.send("window-on-resize", mainWindow.getBounds());
+    mainWindow.webContents.send("window-on-change", {
+      event: "resize",
+      state: mainWindow.getBounds(),
+    });
+  });
+
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow.webContents.send("window-on-change", {
+      event: "enter-full-screen",
+    });
+  });
+
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow.webContents.send("window-on-change", {
+      event: "leave-full-screen",
+    });
+  });
+
+  mainWindow.on("maximize", () => {
+    mainWindow.webContents.send("window-on-change", { event: "maximize" });
+  });
+
+  mainWindow.on("unmaximize", () => {
+    mainWindow.webContents.send("window-on-change", { event: "unmaximize" });
+  });
+
+  ipcMain.handle("window-is-maximized", () => {
+    return mainWindow.isMaximized();
+  });
+
+  ipcMain.handle("window-toggle-maximized", () => {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+
+  ipcMain.handle("window-maximize", () => {
+    mainWindow.maximize();
+  });
+
+  ipcMain.handle("window-unmaximize", () => {
+    mainWindow.unmaximize();
+  });
+
+  ipcMain.handle("window-fullscreen", () => {
+    mainWindow.setFullScreen(true);
+  });
+
+  ipcMain.handle("window-unfullscreen", () => {
+    mainWindow.setFullScreen(false);
+  });
+
+  ipcMain.handle("window-minimize", () => {
+    mainWindow.minimize();
+  });
+
+  ipcMain.handle("window-close", () => {
+    app.quit();
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => {
@@ -520,7 +644,42 @@ ${log}
     // mainWindow.webContents.openDevTools();
   }
 
-  Menu.setApplicationMenu(null);
+  if (platform() === "darwin") {
+    const menu = Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: "about" },
+          { type: "separator" },
+          { role: "hide" },
+          { role: "unhide" },
+          { type: "separator" },
+          { role: "quit" },
+        ],
+      },
+      {
+        label: "&Help",
+        submenu: [
+          {
+            label: "Check for Updates...",
+            click: () => {
+              shell.openExternal("https://1000h.org/enjoy-app/install.html");
+            },
+          },
+          {
+            label: "Report Issue...",
+            click: () => {
+              shell.openExternal(`${REPO_URL}/issues/new`);
+            },
+          },
+        ],
+      },
+    ]);
+
+    Menu.setApplicationMenu(menu);
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 
   main.win = mainWindow;
 };
